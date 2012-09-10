@@ -115,9 +115,11 @@ for (tg in c(1:length(net\$interactions))) {
 # writing edges
 for (tg in c(1:length(net\$interactions))) {
   for (reg in net\$interactions[tg][[1]]\$input) {
-    edge <- paste("    <edge id=\"G",reg,":G",tg,"\" from=\"G",reg,"\" to=\"G",tg,"\" ", sep="")
-    edge <- paste(edge, "minvalue=\"1\" sign=\"unknown\">\n    </edge>", sep="")
-    write(edge, file=filename, append=TRUE)
+		if (reg > 0) {
+      edge <- paste("    <edge id=\"G",reg,":G",tg,"\" from=\"G",reg,"\" to=\"G",tg,"\" ", sep="")
+      edge <- paste(edge, "minvalue=\"1\" sign=\"unknown\">\n    </edge>", sep="")
+      write(edge, file=filename, append=TRUE)
+	  }
   }
 }
 EOF
