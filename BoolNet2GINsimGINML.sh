@@ -3,36 +3,56 @@
 # Author: Pedro T. Monteiro
 # WebPage: http://pedromonteiro.org
 #
+# Please contribute for this script at:
+# https://github.com/ptgm/BoolNetR2GINsim.git
+#
 # This script generates a GINsim file (GINML) containing a random model 
-# with <nGenes> genes and a number of <nRegs> regulators per gene.
+# with <nGenes> genes and a number of regulators per gene.
 # The model interactions and parameters are computed using BoolNet R tool.
 # The generated model is written in <filename>.ginml 
 # This script do NOT consider any of the GINML graphical features.
 ##########################################################################
 
-if [ $# -ne 3 ]; then
-	echo "USAGE: ./randomBoolNet.sh <filename> <nGenes> <nRegs>";
+function throwError {
+  echo "ERROR Message: $1"
+	echo "USAGE: ./randomBoolNet.sh <filename> <nGenes> <type:same|poisson> <arg>";
 	echo " filename - is the name of the file to be written without extension"
 	echo " nGenes   - is the number of nodes in the network"
-	echo " nRegs    - is the number of regulators per node"
-fi
-BASE=$1
-NGEN=$2
-NREGS=$3
-if [ $NGEN -lt 1 ]; then
-	echo "ERROR: <nGenes> must be greater than 0";
+	echo " same     - all genes will have the same # regulators"
+	echo " poisson  - the # regulators of each gene will follow a poisson distribution"
+	echo " arg      - if (type=same) arg <- #reg else arg <- lambdaParam"
 	exit;
-fi
-if [ $NREGS -lt 1 ]; then
-	echo "ERROR: <nRegs> must be greater than 0";
-	exit;
-fi
-if [ $NGEN -lt $NREGS ]; then
-	echo "ERROR: <nGenes> cannot be smaller than <nRegs>";
-	exit;
+}
+if [ $# -ne 4 ]; then
+	throwError "You must pass exactly 4 arguments (passed $#)"
 fi
 
-GINML=$BASE.ginml
+BASENAME=$1
+NGEN=$2
+TYPE=$3
+ARG=$4
+
+if [ $NGEN -lt 1 ]; then
+	throwError "<nGenes> must be greater than 0";
+fi
+if [ $TYPE != "same" -a $TYPE != "poisson" ]; then
+	throwError "You must specify one of the following types: same | poisson";
+fi
+if [ $TYPE == "same" ]; then
+	if [ $ARG -lt 1 ]; then
+	  throwError "<arg> must be greater than 0";
+  fi
+	if [ $NGEN -lt $ARG ]; then
+		throwError "<nGenes> cannot be smaller than <arg>";
+	fi
+fi
+if [ $TYPE == "poisson" ]; then
+	if [ $ARG -lt 0 ]; then
+		throwError "<arg> must be non-negative for a poisson distribution";
+	fi
+fi
+
+GINML=$BASENAME.ginml
 echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $GINML
 echo "<!DOCTYPE gxl SYSTEM \"http://gin.univ-mrs.fr/GINsim/GINML_2_1.dtd\">" >> $GINML
 echo "<gxl xmlns:xlink=\"http://www.w3.org/1999/xlink\">" >> $GINML
@@ -42,15 +62,23 @@ for (( i=1; i<=$NGEN; i++ )); do
 done
 echo "  <graph id=\"default_name\" class=\"regulatory\" nodeorder=\"$NODES\">" >> $GINML
 
-R --no-save $GINML $NGEN $NREGS <<EOF
+R --no-save $GINML $NGEN $TYPE $ARG <<EOF
 filename <- commandArgs()[3]
 ngenes <- as.numeric(commandArgs()[4])
-nregs <- as.numeric(commandArgs()[5])
+type <- commandArgs()[5]
+arg <- as.numeric(commandArgs()[6])
+if (type == "same") {
+	nregs <- rep(arg, ngenes)
+} else {
+  nregs <- rpois(ngenes, lambda=arg)
+}
 
 library(BoolNet)
 net <- generateRandomNKNetwork(n=ngenes, k=nregs, noIrrelevantGenes=FALSE)
 
 as.binary <- function(v,maxvalue,base=2) {
+  if (maxvalue==0)
+		maxvalue <- 1
 	ndigits <- 1 + floor(log(max(maxvalue), base))
 	r <- rep(0,ndigits)
 	for (i in 1:ndigits) {
@@ -63,7 +91,7 @@ as.binary <- function(v,maxvalue,base=2) {
 # writing nodes
 for (tg in c(1:length(net\$interactions))) {
 	node <- paste("    <node id=\"G",tg,"\" maxvalue=\"1\">", sep="")
-	func <- net\$interactions[tg][[1]]\$func %% 2 # [ TRUE ... FALSE ... FALSE ]
+	func <- net\$interactions[tg][[1]]\$func %% 2
   for (parampos in c(1:length(func))) {
 		if (func[parampos]) {
 			node <- paste(node,"\n      <parameter", sep="")
