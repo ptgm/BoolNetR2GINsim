@@ -4,6 +4,9 @@ BoolNetR2GINsim
 The aim of this project is to provide a collection of scripts 
 to generate random Boolean logical models using BoolNetR.
 
+For the moment, the only script available generates models compatible to the 
+GINsim modeling and simulation tool in the GINML format, without any 
+graphical (node positioning) information.
 
 Requirements?
 -------------
@@ -18,7 +21,7 @@ How to use it?
 
 You can run it using the following command line format:
 
-    sh randomBoolNet.sh <filename> <nGenes> <reg-type:same|poisson> <arg> <param-type:random|and|or>
+    sh BoolNet2GINsimGINML.sh <filename> <nGenes> <reg-type:same|poisson> <arg> <param-type:random|and|or>
 
 where the arguments have the following semantics:
   * filename   - is the name of the file to be written without extension
