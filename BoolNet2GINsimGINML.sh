@@ -10,35 +10,41 @@
 # with <nGenes> genes and a number of regulators per gene.
 # The model interactions and parameters are computed using BoolNet R tool.
 # The generated model is written in <filename>.ginml 
-# This script do NOT consider any of the GINML graphical features.
+# This script does NOT consider any of the GINML graphical features.
 ##########################################################################
 
 function throwError {
   echo "ERROR Message: $1"
-	echo "USAGE: ./randomBoolNet.sh <filename> <nGenes> <type:same|poisson> <arg>";
-	echo " filename - is the name of the file to be written without extension"
-	echo " nGenes   - is the number of nodes in the network"
-	echo " same     - all genes will have the same # regulators"
-	echo " poisson  - the # regulators of each gene will follow a poisson distribution"
-	echo " arg      - if (type=same) arg <- #reg else arg <- lambdaParam"
+	echo "USAGE: ./randomBoolNet.sh <filename> <nGenes> <reg-type:same|poisson> <arg> <param-type:random|and|or>";
+	echo " filename   - is the name of the file to be written without extension"
+	echo " nGenes     - is the number of nodes in the network"
+	echo " reg-type   - the type of regulator selection:"
+	echo "    same    - all genes will have the same # regulators"
+	echo "    poisson - the # regulators of each gene will follow a poisson distribution"
+	echo " arg        - if (type=same) arg <- #reg else arg <- lambdaParam"
+	echo " param-type - the type of parameter selection per node"
+	echo "    random  - randomly selected following an uniform distribution"
+	echo "    and     - parameters are selected to perform an AND on regulators"
+	echo "    or      - parameters are selected to perform an OR on regulators"
 	exit;
 }
-if [ $# -ne 4 ]; then
-	throwError "You must pass exactly 4 arguments (passed $#)"
+if [ $# -ne 5 ]; then
+	throwError "You must pass exactly 5 arguments (passed $#)"
 fi
 
 BASENAME=$1
 NGEN=$2
-TYPE=$3
+REGTYPE=$3
 ARG=$4
+PARAMTYPE=$5
 
 if [ $NGEN -lt 1 ]; then
 	throwError "<nGenes> must be greater than 0";
 fi
-if [ $TYPE != "same" -a $TYPE != "poisson" ]; then
-	throwError "You must specify one of the following types: same | poisson";
+if [ $REGTYPE != "same" -a $REGTYPE != "poisson" ]; then
+	throwError "<reg-type> must be one of the following types: same | poisson";
 fi
-if [ $TYPE == "same" ]; then
+if [ $REGTYPE == "same" ]; then
 	if [ $ARG -lt 1 ]; then
 	  throwError "<arg> must be greater than 0";
   fi
@@ -46,10 +52,13 @@ if [ $TYPE == "same" ]; then
 		throwError "<nGenes> cannot be smaller than <arg>";
 	fi
 fi
-if [ $TYPE == "poisson" ]; then
+if [ $REGTYPE == "poisson" ]; then
 	if [ $ARG -lt 0 ]; then
 		throwError "<arg> must be non-negative for a poisson distribution";
 	fi
+fi
+if [ $PARAMTYPE != "random" -a $PARAMTYPE != "and" -a $PARAMTYPE != "or" ]; then
+	throwError "<param-type> must be one of the following types: random | and | or";
 fi
 
 GINML=$BASENAME.ginml
@@ -62,12 +71,13 @@ for (( i=1; i<=$NGEN; i++ )); do
 done
 echo "  <graph id=\"default_name\" class=\"regulatory\" nodeorder=\"$NODES\">" >> $GINML
 
-R --no-save $GINML $NGEN $TYPE $ARG <<EOF
+R --no-save $GINML $NGEN $REGTYPE $ARG $PARAMTYPE <<EOF
 filename <- commandArgs()[3]
 ngenes <- as.numeric(commandArgs()[4])
-type <- commandArgs()[5]
+regtype <- commandArgs()[5]
 arg <- as.numeric(commandArgs()[6])
-if (type == "same") {
+paramtype <- commandArgs()[7]
+if (regtype == "same") {
 	nregs <- rep(arg, ngenes)
 } else {
   nregs <- rpois(ngenes, lambda=arg)
@@ -75,6 +85,26 @@ if (type == "same") {
 
 library(BoolNet)
 net <- generateRandomNKNetwork(n=ngenes, k=nregs, noIrrelevantGenes=FALSE)
+if (paramtype != "random") {
+	for (v in c(1:length(net\$interactions))) {
+		func <- net\$interactions[v][[1]]\$func
+		for (i in 1:c(length(func))) {
+			if (paramtype == "or") {
+				if (i == 1) {
+					net\$interactions[v][[1]]\$func[i] = 0;
+				} else {
+					net\$interactions[v][[1]]\$func[i] = 1;
+				}
+			} else { # paramtype = "and"
+				if (i == length(func)) {
+					net\$interactions[v][[1]]\$func[i] = 1;
+				} else {
+					net\$interactions[v][[1]]\$func[i] = 0;
+				}
+			}
+		}
+	}
+}
 
 as.binary <- function(v,maxvalue,base=2) {
   if (maxvalue==0)
