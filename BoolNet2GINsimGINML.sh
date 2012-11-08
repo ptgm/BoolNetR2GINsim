@@ -15,17 +15,16 @@
 
 function throwError {
   echo "ERROR Message: $1"
-	echo "USAGE: ./randomBoolNet.sh <filename> <nGenes> <reg-type:same|poisson> <arg> <param-type:random|and|or>";
+	echo "USAGE: ./randomBoolNet.sh <filename> <nGenes> <reg-type:same|poisson> <arg> <param-type:random|andor>";
 	echo " filename   - is the name of the file to be written without extension"
 	echo " nGenes     - is the number of nodes in the network"
 	echo " reg-type   - the type of regulator selection:"
 	echo "    same    - all genes will have the same # regulators"
 	echo "    poisson - the # regulators of each gene will follow a poisson distribution"
 	echo " arg        - if (type=same) arg <- #reg else arg <- lambdaParam"
-	echo " param-type - the type of parameter selection per node"
-	echo "    random  - randomly selected following an uniform distribution"
-	echo "    and     - parameters are selected to perform an AND on regulators"
-	echo "    or      - parameters are selected to perform an OR on regulators"
+	echo " param-type - the type of parameter selection for each node"
+	echo "    random  - all parameters are randomly selected (uniform distribution)"
+	echo "    andor   - parameters are selected to perform an AND or a OR on regulators"
 	exit;
 }
 if [ $# -ne 5 ]; then
@@ -57,8 +56,8 @@ if [ $REGTYPE == "poisson" ]; then
 		throwError "<arg> must be non-negative for a poisson distribution";
 	fi
 fi
-if [ $PARAMTYPE != "random" -a $PARAMTYPE != "and" -a $PARAMTYPE != "or" ]; then
-	throwError "<param-type> must be one of the following types: random | and | or";
+if [ $PARAMTYPE != "random" -a $PARAMTYPE != "andor" ]; then
+	throwError "<param-type> must be one of the following types: random | andor";
 fi
 
 GINML=$BASENAME.ginml
@@ -71,7 +70,7 @@ for (( i=1; i<=$NGEN; i++ )); do
 done
 echo "  <graph id=\"default_name\" class=\"regulatory\" nodeorder=\"$NODES\">" >> $GINML
 
-R --no-save $GINML $NGEN $REGTYPE $ARG $PARAMTYPE <<EOF
+/usr/bin/R --no-save $GINML $NGEN $REGTYPE $ARG $PARAMTYPE <<EOF
 filename <- commandArgs()[3]
 ngenes <- as.numeric(commandArgs()[4])
 regtype <- commandArgs()[5]
@@ -88,8 +87,9 @@ net <- generateRandomNKNetwork(n=ngenes, k=nregs, noIrrelevantGenes=FALSE)
 if (paramtype != "random") {
 	for (v in c(1:length(net\$interactions))) {
 		func <- net\$interactions[v][[1]]\$func
+		and <- sample(c(TRUE,FALSE),1);
 		for (i in 1:c(length(func))) {
-			if (paramtype == "or") {
+			if (!and) {
 				if (i == 1) {
 					net\$interactions[v][[1]]\$func[i] = 0;
 				} else {
