@@ -79,30 +79,47 @@ paramtype <- commandArgs()[7]
 if (regtype == "same") {
 	nregs <- rep(arg, ngenes)
 } else {
-  nregs <- rpois(ngenes, lambda=arg)
+	# All genes have # regs = poisson(lambda) + 1
+  nregs <- rpois(ngenes, lambda=arg) + 1
+	for (i in 1:length(nregs)) {
+		if (nregs[i] > ngenes) {
+			nregs[i] <- ngenes;
+		}
+	}
+}
+
+vect2pos <- function(vect) {
+	sz <- length(vect)
+	n <- 1
+	for (i in c(1:sz)) {
+		if (vect[i]) {
+			n <- n + 2^(sz-i);
+		}
+	}
+	return(n)
 }
 
 library(BoolNet)
 net <- generateRandomNKNetwork(n=ngenes, k=nregs, noIrrelevantGenes=FALSE)
 if (paramtype != "random") {
-	for (v in c(1:length(net\$interactions))) {
-		func <- net\$interactions[v][[1]]\$func
-		and <- sample(c(TRUE,FALSE),1);
-		for (i in 1:c(length(func))) {
-			if (!and) {
-				if (i == 1) {
-					net\$interactions[v][[1]]\$func[i] = 0;
-				} else {
-					net\$interactions[v][[1]]\$func[i] = 1;
-				}
-			} else { # paramtype = "and"
-				if (i == length(func)) {
-					net\$interactions[v][[1]]\$func[i] = 1;
-				} else {
-					net\$interactions[v][[1]]\$func[i] = 0;
-				}
-			}
+	for (v in c(1:ngenes)) {
+		net\$interactions[[v]]\$isAnd <- sample(c(TRUE,FALSE),1);
+		for (reg in c(1:nregs[v])) {
+			net\$interactions[[v]]\$posSign[reg] <- sample(c(TRUE,FALSE),1);
 		}
+		if (sample(c(TRUE,FALSE),1)) { # AND
+			pos <- vect2pos(net\$interactions[[v]]\$posSign);
+			valAll <- 0
+			valPos <- 1
+		} else {
+			pos <- vect2pos(!net\$interactions[[v]]\$posSign);
+			valAll <- 1
+			valPos <- 0
+		}
+		for (i in 1:c(length(net\$interactions[[v]]\$func))) {
+			net\$interactions[[v]]\$func[i] = valAll;
+		}
+		net\$interactions[[v]]\$func[pos] = valPos;
 	}
 }
 
@@ -119,16 +136,16 @@ as.binary <- function(v,maxvalue,base=2) {
 }
 
 # writing nodes
-for (tg in c(1:length(net\$interactions))) {
+for (tg in c(1:ngenes)) {
 	node <- paste("    <node id=\"G",tg,"\" maxvalue=\"1\">", sep="")
-	func <- net\$interactions[tg][[1]]\$func %% 2
+	func <- net\$interactions[[tg]]\$func %% 2
   for (parampos in c(1:length(func))) {
 		if (func[parampos]) {
 			node <- paste(node,"\n      <parameter", sep="")
 			inters <- ""
 			dec2bin <- as.binary(parampos-1,length(func)-1)
-			regs <- net\$interactions[tg][[1]]\$input
-			for (ireg in 1:c(length(regs))) {
+			regs <- net\$interactions[[tg]]\$input
+			for (ireg in 1:length(regs)) {
 				if (dec2bin[ireg] == 1)
 					inters <- paste(inters," G",regs[ireg],":G",tg, sep="")
 			}
@@ -143,13 +160,20 @@ for (tg in c(1:length(net\$interactions))) {
 }
 
 # writing edges
-for (tg in c(1:length(net\$interactions))) {
-  for (reg in net\$interactions[tg][[1]]\$input) {
-		if (reg > 0) {
-      edge <- paste("    <edge id=\"G",reg,":G",tg,"\" from=\"G",reg,"\" to=\"G",tg,"\" ", sep="")
-      edge <- paste(edge, "minvalue=\"1\" sign=\"unknown\">\n    </edge>", sep="")
-      write(edge, file=filename, append=TRUE)
-	  }
+for (tg in c(1:ngenes)) {
+	regs <- net\$interactions[[tg]]\$input
+	for (ireg in 1:length(regs)) {
+		if (paramtype != "random") {
+			if (net\$interactions[[tg]]\$posSign[ireg]) {
+				sign <- "positive";
+			} else {
+				sign <- "negative";
+			}
+		} else {
+			sign <- "unknown";
+		}
+		edge <- paste("    <edge id=\"G",regs[ireg],":G",tg,"\" from=\"G",regs[ireg],"\" to=\"G",tg,"\" minvalue=\"1\" sign=\"", sign, "\">\n    </edge>", sep="")
+		write(edge, file=filename, append=TRUE)
   }
 }
 EOF
